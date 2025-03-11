@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Ai Labs Extension",
+  "name": "2ndbrain Extension",
   "version": "1.0",
-  "description": "This extension would be able to take text from the clipboard and would be able to save it to his/her ai labs notebook.",
+  "description": "This extension would be able to take text from the clipboard and would be able to save it to 2ndbrain bookmark",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -17,14 +17,14 @@
   "action": {
     "default_popup": "index.html",
     "default_icon": {
-      "16": "/icons/icon16.png",
-      "48": "/icons/icon48.png",
-      "128": "/icons/icon128.png"
+      "16": "/icons/favicon16.png", 
+      "48": "/icons/favicon48.png", 
+      "128": "/icons/favicon128.png"
     }
   },
   "icons": {
-    "16": "/icons/icon16.png",
-    "48": "/icons/icon48.png",
-    "128": "/icons/icon128.png"
+    "16": "/icons/favicon16.png", 
+    "48": "/icons/favicon48.png", 
+    "128": "/icons/favicon128.png"
   }
 }
