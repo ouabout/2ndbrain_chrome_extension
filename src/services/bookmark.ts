@@ -7,6 +7,7 @@ type Bookmark = {
     keywords?: string;
     tags?: string[];
     summary?: string;
+    structured_summary?: string;
     source?: string;
 }
 
@@ -37,8 +38,8 @@ export const summarizeContent = async (content: string) => {
         });
     }
     catch (error) {
-        console.log(error);
-        throw new Error("An error occurred while summarizing.");
+        console.log("summarizeContent: Error: ", error);
+        throw new Error("summarizeContent: An error occurred while summarizing. Error: " + error);
     }
  
     //todo: 
@@ -46,42 +47,98 @@ export const summarizeContent = async (content: string) => {
     // 2. handle summarization response and code for displaying it
 };
 
-export const startSummarizeContent = async (content: string, title: string) => {
+export const startSummarizeContent = async (content: string, title: string, isYoutube = false) => {
     if (!content) {
         throw new Error("Content is required to summarize.");
     }
 
-    const requestBody = {content, title};
-
     try{
-        const response = await axios.post("/api/bookmarks/utils/start-website-summary", requestBody, {
-            headers: {
-                "Content-Type": "application/json"
-            }
-        });
-        const data = await response.data;
-        const title = data.title;
-        const jobId = data.jobId;
-        console.log("Title:", title);
-        console.log("Job ID:", jobId);  
+        if (isYoutube) {
+            const requestBody = {content}
+            const response = await axios.post("/api/bookmarks/utils/start-video-summary", requestBody, {
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+            const data = await response.data;
+            const retJobId = data.jobId;
+            console.log("Job ID:", retJobId);
+    
+            return {jobId: retJobId};
 
-        return {title, jobId};
+        }
+        else {
+            const requestBody = {content, title};
+            const response = await axios.post("/api/bookmarks/utils/start-website-summary", requestBody, {
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+            const data = await response.data;
+            const retTitle = data.title;
+            const retJobId = data.jobId;
+            console.log("Title:", retTitle);
+            console.log("Job ID:", retJobId);
+    
+            return {title: retTitle, jobId: retJobId};
+        }
     }
     catch (error) {
-        console.log(error);
-        throw new Error("An error occurred while summarizing.");
+        console.log("startSummarizeContent: Error: ", error);
+        throw new Error("startSummarizeContent: An error occurred while summarizing. Error: " + error);
     }
 
 };
 
-export const streamSummarizeContent = async (jobId: string) => {
+export const streamSummarizeContent = async (jobId: string, isYoutube = false) => {
     if (!jobId) {
         throw new Error("Job ID is required to summarize.");
         return;
 
     }
     try{
-        const es_url = new URL('/api/bookmarks/utils/stream-website-summary', window.location.origin);
+        let es_url : URL;
+        if (isYoutube) {
+            es_url = new URL('/api/bookmarks/utils/stream-video-summary', window.location.origin);
+        }
+        else {
+            es_url = new URL('/api/bookmarks/utils/stream-website-summary', window.location.origin);
+        }
+        es_url.searchParams.append('jobId', jobId);        
+        
+        const eventSource = new EventSource(es_url.toString());        
+
+        let respMsg = '';
+        eventSource.onmessage = function(event) {      
+          // Handle the received data
+          // console.log(event.data);
+            // append event.data to the response message
+            respMsg += event.data; 
+            return respMsg;
+        };
+      
+        eventSource.onerror = function(error) {
+          // Handle any errors that occur
+          console.error('EventSource failed:', error);
+          eventSource.close();
+
+          return error;
+        };        
+    }
+    catch (error) {
+        console.log("streamSummarizeContent: Error:", error);
+        throw new Error("streamSummarizeContent: An error occurred while summarizing. Error: " + error);
+    }
+};
+
+export const streamVideoSummary = async (jobId: string) => {
+    if (!jobId) {
+        throw new Error("Job ID is required to summarize.");
+        return;
+
+    }
+    try{
+        const es_url = new URL('/api/bookmarks/utils/stream-video-summary', window.location.origin);
 
         es_url.searchParams.append('jobId', jobId);        
         
@@ -105,8 +162,8 @@ export const streamSummarizeContent = async (jobId: string) => {
         };        
     }
     catch (error) {
-        console.log(error);
-        throw new Error("An error occurred while summarizing.");
+        console.log("streamVideoSummary: Error:", error);
+        throw new Error("streamVideoSummary: An error occurred while summarizing. Error: " + error);
     }
 };
 
@@ -132,8 +189,8 @@ export const getTagsFromSummary = async (summary: string) => {
         return {tags, keywords};    
     }
     catch (error) {
-        console.log(error);
-        throw new Error("An error occurred while summarizing.");
+        console.log("getTagsFromSummary: Error:", error);
+        throw new Error("getTagsFromSummary:An error occurred while summarizing. Error: " + error);
     }
 };
 

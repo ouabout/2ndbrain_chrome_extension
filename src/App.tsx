@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "./components/ui/button";
 import toast from "react-hot-toast";
 import { USER_ID } from "@/common";
 import { createNewBookmark, startSummarizeContent, getTagsFromSummary } from "./services/bookmark";  
 import { Readability } from "@mozilla/readability";
 import { YoutubeTranscript } from 'youtube-transcript';
+import ReactMarkdown from 'react-markdown';
 
 function MainApp({
   selection,
@@ -15,11 +16,19 @@ function MainApp({
   const [savedDocId, setSavedDocId] = useState("");
   const [showSelectedText, setShowSelectedText] = useState(false);
 //  const [selectedContent] = useState(selection.content);
-  const [summary, setSummary] = useState(""); 
+  const [summary, setSummary] = useState("");
+  const [structuredSummary, setStructuredSummary] = useState("");  
+  const [structuredSummaryOutput, setStructuredSummaryOutput] = useState("");
   const [tags, setTags] = useState("");
   const [keywords, setKeywords] = useState("");
   const [loading, setLoading] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [thinking, setThinking] = useState("");
+  const [latestThinking, setLatestThinking] = useState("");
+  const [showFullThinking, setShowFullThinking] = useState(false);
+  //const [showFullSummary, setShowFullSummary] = useState(false);
+  const thinkingRef = useRef<HTMLDivElement>(null); // Reference for the thinking div
+
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
   const handleSaveTextIntoDB = async () => {
@@ -33,10 +42,11 @@ function MainApp({
         {
           url: selection.src,
           title: selection.title,
-          raw_data: selection.content,
+          raw_data: selection.content,          
           tags: tagsArray,
           keywords: keywords,
           summary: summary,
+          structured_summary: structuredSummary,
           source: ""
         },
         USER_ID
@@ -54,127 +64,11 @@ function MainApp({
     }
   };
 
-/*  const handleProcess = async () => {
-    try {
-      // check if selection.src is a youtube url
-      if (selection.src.includes("youtube.com")) {
-        const transcript = await YoutubeTranscript.fetchTranscript(selection.src);
-        console.log("transcript: ", transcript);
-        // convert transcript json array into a string
-        const transcriptString = JSON.stringify(transcript, null , 2);
-        // convert transcript text into a string
-        const transcriptText = transcript.map(item => item.text).join("\n");
-        setSelectedContent(transcriptString);
-        setSelectionContentText(transcriptText);
-        return;
-      }
 
-      let selectedHTML = selection.content;
-      if (!selectedHTML){
-        console.log("No HTML found in selection");
-        return;
-      }
-
-      // Check if the content already seems like a full HTML document.
-      const hasHTMLTag = /<html[\s\S]*>/i.test(selectedHTML);
-      let fullHTML;
-
-      if (hasHTMLTag) {
-        fullHTML = selectedHTML;
-      } else {
-        // If it's just a fragment, wrap it in a basic HTML structure.
-        fullHTML = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="UTF-8">
-              <title>Fragment Document</title>
-            </head>
-            <body>
-              ${selectedHTML}
-            </body>
-          </html>
-        `;
-      }
-
-      // Create a DOM document from the HTML string.
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(fullHTML, "text/html");
-
-      // Use Readability to parse the document.
-      const article = new Readability(doc).parse();
-      // remove all html tags and script tags and keep only the text
-      const articleText = article?.content.replace(/<[^>]*>?/gm, '').replace(/<script[^>]*>.*?<\/script>/gm, '') || '';
-
-      if (article) {
-        console.log("Article Title:", article.title);
-        console.log("Article Content Text:", articleText);
-        setSelectedContent(article.content);
-        setSelectionContentText(articleText);
-      } else {
-        console.log("Readability could not parse the content.");
-      }
-    } catch (error) {
-      console.error("Error processing article:", error);  
-    }
-  };
-*/
-  /*
-  const handleSummarize = async () => {
-    //TODO: streaming summarization output
-    //TODO: fill in keywords during summarization
-    try {
-      setSummarizing(true);
-      
-      let selectedHTML = selectedContent;
-      if (!selectedHTML){
-        return toast.error("No content to summarize.");
-      }
-      
-      const { data } = await summarizeContent(selectedHTML);
-      // data.summary is assumed to be a JSON string. Parse it if necessary.
-      let summaryData: any;
-      if (typeof data.summary === "string") {
-        try {
-          summaryData = JSON.parse(data.summary);
-        } catch (parseError) {
-          console.error("Error parsing summary JSON:", parseError);
-          toast.error("Error processing summary data.");
-          return;
-        }
-      } else {
-        toast.error("Error processing summary data.");
-        return;
-      }
-
-      // Extract keyInsights from the parsed summary data
-      if (!summaryData.keyInsights || !Array.isArray(summaryData.keyInsights)) {
-        toast.error("Summary does not contain key insights.");
-        return;
-      }
-      const keypoints = summaryData.keyInsights;
-      console.log("keypoints:", keypoints);
-      if (Array.isArray(keypoints)) {
-        // convert keypoints to a string
-        const keypointsString = keypoints.map(keypoint => `• ${keypoint}`).join("<br>");
-        setSummary(keypointsString);
-      } else {
-        setSummary(keypoints);
-      }
-      toast.success("Summary generated successfully!");
-    } catch (error) {
-      console.error(error, "Error");
-      toast.error("An error occurred while generating summary.");
-    } finally {
-      setSummarizing(false);
-    }
-  };
-  */
-
-  const handleGetTags = async () => {
+  const handleGetTags = async (sum) => {
     try { 
         // get tags from summary
-        const result = await getTagsFromSummary(summary);
+        const result = await getTagsFromSummary(sum);
         const tags_str = result?.tags;
         const keywords_str = result?.keywords;
         console.log("Received tags: ", tags_str);
@@ -191,21 +85,35 @@ function MainApp({
 
   const handleGetSummary = async () => {
     try {
+      const isYoutube = selection.src.includes("youtube.com");
       setSummarizing(true);
+      console.log("src: ", selection.src);
       
-      let selectedHTML = selection.contentText;
+      let selectedHTML;
+      if (isYoutube) {
+        selectedHTML = selection.content;
+      } else {
+        selectedHTML = selection.contentText;      
+      }
+
+      console.log("isYoutube: ", isYoutube);
       console.log("selectedHTML: ", selectedHTML);
       if (!selectedHTML){
         return toast.error("No content to summarize.");
       }
       
-      const resp = await startSummarizeContent(selectedHTML, selection.title);
+      const resp = await startSummarizeContent(selectedHTML, selection.title, isYoutube);
       // data.summary is assumed to be a JSON string. Parse it if necessary.
       //const title = resp.title;
       const jobId = resp.jobId;
       console.log("started job id:", jobId);
 
-      const es_url = new URL('/api/bookmarks/utils/stream-website-summary', backendUrl); // Use the environment variable here
+      let es_url: URL;
+      if (isYoutube) 
+        es_url = new URL('/api/bookmarks/utils/stream-video-summary', backendUrl); // Use the environment variable here
+      else
+        es_url = new URL('/api/bookmarks/utils/stream-website-summary', backendUrl); // Use the environment variable here
+      
       es_url.searchParams.append('jobId', jobId);       
       console.log("es_url:", es_url.toString());
       const eventSource = new EventSource(es_url.toString());        
@@ -213,20 +121,38 @@ function MainApp({
       let respMsg = '';
       eventSource.onmessage = function(event) {      
         // Handle the received data
-        console.log(event.data);
-          // append event.data to the response message
-          respMsg += event.data; 
-          setSummary(respMsg);
+        //console.log(event.data);
+        // replace all '\\n' inside event.data to '\n'
+        const event_data = event.data.replace(/\\n/g, '\n');
+        // append event.data to the response message
+        respMsg += event_data;
+        setThinking(respMsg);
+        setSummary(respMsg);
+
+        // update the thinking div with the last two lines
+        const lines = respMsg.split('\n');
+        const lastTwoLines = lines.slice(Math.max(lines.length - 2, 0));
+        console.log("lastTwoLines: ", lastTwoLines);
+        setLatestThinking(lastTwoLines.join('\n'));
+
+        // Scroll to the bottom of the thinking div
+        /*if (thinkingRef.current) {
+          thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight;
+        }*/
       };
+      
 
       eventSource.addEventListener('stream-end', function(event) {
-        console.log('Stream ended:');
-        // get tags from summary
-        /*const respTags = getTagsFromSummary(respMsg);
-        console.log("Received tags: ", respTags);
-        // set tags
-        setTags(respTags['tags']);
-        toast.success("Summary and tags generated successfully!");*/
+        console.log('GetSummary stream ended.');
+        if(isYoutube){
+          handleSummaryProcessing();    //generate nice looking markdown video summary
+          handleGetTextSummary(); //generate text summary for the selected text
+        }
+        else{
+          // get tags from summary
+          handleGetTags(respMsg);
+          setSummarizing(false);
+        }
         // Handle stream end
         eventSource.close();
       });
@@ -235,13 +161,119 @@ function MainApp({
         // Handle any errors that occur
         console.error('EventSource failed:', error);
         eventSource.close();
+        setSummarizing(false);
         toast.error("Error: "+error);
      };        
     } catch (error) {
+      setSummarizing(false);
       console.error(error, "Error");
       toast.error("An error occurred while generating summary.");
-    } finally {
+    }
+  };
+
+  const handleGetTextSummary = async () => {
+    try {
+      setSummarizing(true);
+      
+      const selectedHTML = selection.contentText;      
+
+      console.log("selectedHTML: ", selectedHTML);
+      if (!selectedHTML){
+        return toast.error("No content to summarize.");
+      }
+      
+      const resp = await startSummarizeContent(selectedHTML, selection.title, false);
+      // data.summary is assumed to be a JSON string. Parse it if necessary.
+      //const title = resp.title;
+      const jobId = resp.jobId;
+      console.log("started job id:", jobId);
+
+      let es_url: URL;
+      es_url = new URL('/api/bookmarks/utils/stream-website-summary', backendUrl); // Use the environment variable here
+      
+      es_url.searchParams.append('jobId', jobId);       
+      console.log("es_url:", es_url.toString());
+      const eventSource = new EventSource(es_url.toString());        
+
+      let respMsg = '';
+      eventSource.onmessage = function(event) {      
+        // Handle the received data
+        //console.log(event.data);
+        // replace all '\\n' inside event.data to '\n'
+        const event_data = event.data.replace(/\\n/g, '\n');
+        // append event.data to the response message
+        respMsg += event_data;
+        setSummary(respMsg);
+      };
+      
+
+      eventSource.addEventListener('stream-end', function(event) {
+        console.log('GetTextSummary stream ended.');
+        // get tags from summary
+        handleGetTags(respMsg);        
+        toast.success("Summary and tags generated successfully!");
+        // Handle stream end
+        eventSource.close();
+        setSummarizing(false);
+
+      });
+    
+      eventSource.onerror = function(error) {
+        setSummarizing(false);
+
+        // Handle any errors that occur
+        console.error('EventSource failed:', error);
+        eventSource.close();
+        toast.error("Error: "+error);
+     };        
+    } catch (error) {
       setSummarizing(false);
+
+      console.error(error, "Error");
+      toast.error("An error occurred while generating text summary.");
+    }
+  };  
+
+  const handleSummaryProcessing = () => {
+    try {
+      console.log("processing thinking results to generate final summary...");
+      // Remove backticks from the thinking string
+      let cleanedThinking = thinking.trim();
+      console.log("cleanedThinking: ", cleanedThinking);
+
+      if (cleanedThinking.startsWith("```json") && cleanedThinking.endsWith("```")) {
+        console.log("cleaning thinking results...")
+        cleanedThinking = cleanedThinking.substring(7, cleanedThinking.length - 3).trim();
+      }
+
+      setStructuredSummary(cleanedThinking);
+
+      // Parse the cleaned JSON string
+      const jsonData = JSON.parse(cleanedThinking);
+
+      // Check if jsonData is an array (add this check for robustness)
+      if (!Array.isArray(jsonData)) {
+        throw new Error("Invalid JSON data format. Expected an array.");
+      }
+
+      console.log("jsonData:", jsonData);
+
+      // Generate markdown summary (rest of the function remains the same)
+      let markdownSummary = "";
+      jsonData.forEach((section: any) => {
+        markdownSummary += `### ${section.title}\n`;
+        markdownSummary += `**Timestamp:** ${section.timestamp}\n\n`;
+        markdownSummary += `**Key Points:**\n`;
+        section.keypoints.forEach((point: string) => {
+          markdownSummary += `- ${point}\n`;
+        });
+        markdownSummary += "\n";
+      });
+
+      setStructuredSummaryOutput(markdownSummary);
+    } catch (error: any) {
+      console.error("Error processing summary:", error);
+      setSummary(`Error processing summary: ${error.message}`);
     }
   };
 
@@ -268,14 +300,42 @@ function MainApp({
             <Button variant={"destructive"} onClick={handleGetSummary} disabled={summarizing}>
               {summarizing ? "Summarizing..." : "Summarize"}
             </Button>
-            {summary && (
-              <div className="mt-4">
-                <p className="mt-3 bg-gray-800 p-3 rounded-md text-gray-300"
-                dangerouslySetInnerHTML={{__html: summary}}
-                />
-              </div>                
+            {thinking && (
+              <div className="mt-4" ref={thinkingRef}> {/* Added ref */}
+                <div
+                  className="mt-3 bg-gray-800 p-3 rounded-md text-gray-300 cursor-pointer"
+                  onClick={() => setShowFullThinking(!showFullThinking)}
+                >
+                  {/* Conditionally render full or truncated thinking */}
+                  {showFullThinking ? (
+                    <p>{thinking}</p>
+                  ) : (
+                    <p>{latestThinking}</p>
+                  )}
+                </div>
+              </div>
             )}
-            <Button variant={"destructive"} onClick={handleGetTags}>
+          </div>
+          <div className="mt-6 flex flex-col gap-4">
+          <div className="mt-4">
+              {structuredSummaryOutput || summary ? ( // Conditional rendering
+                <ReactMarkdown
+                  components={{
+                    h1: ({node, ...props}) => <h1 className="text-4xl font-bold my-4" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-3xl font-bold my-3" {...props} />,
+                    h3: ({node, ...props}) => <h3 className="text-2xl font-bold my-2" {...props} />,
+                    p: ({node, ...props}) => <p className="text-base leading-relaxed my-2" {...props} />,
+                    ul: ({node, ...props}) => <ul className="list-disc pl-6 my-2" {...props} />,
+                    li: ({node, ...props}) => <li className="my-1" {...props} />,
+                  }}
+                >
+                  {structuredSummaryOutput || summary} 
+                </ReactMarkdown>
+              ) : null}
+          </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-4">
+            <Button variant={"destructive"} onClick={() => handleGetTags(summary)}>
               Generate Tags
             </Button>
             {tags && (
