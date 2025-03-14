@@ -305,8 +305,10 @@ function MainApp({
             </div>
           )}
           <div className="mt-6 flex flex-col gap-4">
-            <Button variant={"destructive"} onClick={handleGetSummary} disabled={summarizing}>
-              {summarizing ? "Summarizing..." : "Summarize"}
+            <Button variant={"destructive"} onClick={handleGetSummary} disabled={summarizing || !selection.contentText}>
+            {selection.contentText 
+              ? (summarizing ? "Summarizing..." : "Summarize")
+              : "Gathering context..."}
             </Button>
             {thinking && (
               <div className="mt-4" ref={thinkingRef}> {/* Added ref */}
