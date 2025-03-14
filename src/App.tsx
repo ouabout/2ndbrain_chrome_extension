@@ -145,14 +145,15 @@ function MainApp({
       eventSource.addEventListener('stream-end', function(event) {
         console.log('GetSummary stream ended.');
         if(isYoutube){
-          handleSummaryProcessing();    //generate nice looking markdown video summary
-          handleGetTextSummary(); //generate text summary for the selected text
+          const retSummary = handleSummaryProcessing(respMsg);    //generate nice looking markdown video summary and a concise summary string
+          setSummary(retSummary);
+          handleGetTags(retSummary);
         }
         else{
           // get tags from summary
           handleGetTags(respMsg);
-          setSummarizing(false);
         }
+        setSummarizing(false);
         // Handle stream end
         eventSource.close();
       });
@@ -171,7 +172,7 @@ function MainApp({
     }
   };
 
-  const handleGetTextSummary = async () => {
+/*  const handleGetTextSummary = async () => {
     try {
       setSummarizing(true);
       
@@ -232,45 +233,52 @@ function MainApp({
       console.error(error, "Error");
       toast.error("An error occurred while generating text summary.");
     }
-  };  
+  };  */
 
-  const handleSummaryProcessing = () => {
+  const handleSummaryProcessing = (content: string) => {
     try {
       console.log("processing thinking results to generate final summary...");
-      // Remove backticks from the thinking string
-      let cleanedThinking = thinking.trim();
-      console.log("cleanedThinking: ", cleanedThinking);
-
-      if (cleanedThinking.startsWith("```json") && cleanedThinking.endsWith("```")) {
-        console.log("cleaning thinking results...")
-        cleanedThinking = cleanedThinking.substring(7, cleanedThinking.length - 3).trim();
+  
+      // Extract JSON content using regex to handle markers and extra characters
+      const jsonRegex = /```json([\s\S]*?)```/;
+      const match = content.match(jsonRegex);
+      let cleanedThinking;
+      if (match) {
+        cleanedThinking = match[1].trim();
+      } else {
+        cleanedThinking = content.trim();
       }
-
       setStructuredSummary(cleanedThinking);
-
+  
       // Parse the cleaned JSON string
       const jsonData = JSON.parse(cleanedThinking);
-
-      // Check if jsonData is an array (add this check for robustness)
-      if (!Array.isArray(jsonData)) {
-        throw new Error("Invalid JSON data format. Expected an array.");
+  
+      // Validate that jsonData is an object with a 'sections' array
+      if (!jsonData || typeof jsonData !== "object" || !Array.isArray(jsonData.sections)) {
+        throw new Error("Invalid JSON data format. Expected an object with 'sections' array.");
       }
-
-      console.log("jsonData:", jsonData);
-
-      // Generate markdown summary (rest of the function remains the same)
-      let markdownSummary = "";
-      jsonData.forEach((section: any) => {
-        markdownSummary += `### ${section.title}\n`;
-        markdownSummary += `**Timestamp:** ${section.timestamp}\n\n`;
+  
+      // Generate markdown summary
+      let markdownSummary = `# Overall Summary\n${jsonData.summary || "No summary provided."}\n\n`;
+      markdownSummary += "## Sections\n";
+      jsonData.sections.forEach((section: any) => {
+        markdownSummary += `### ${section.title || "Untitled"}\n`;
+        markdownSummary += `**Timestamp:** ${section.timestamp || "N/A"}\n\n`;
         markdownSummary += `**Key Points:**\n`;
-        section.keypoints.forEach((point: string) => {
-          markdownSummary += `- ${point}\n`;
-        });
+        if (Array.isArray(section.keypoints)) {
+          section.keypoints.forEach((point: string) => {
+            markdownSummary += `- ${point}\n`;
+          });
+        } else {
+          markdownSummary += "- No key points provided.\n";
+        }
         markdownSummary += "\n";
       });
-
+  
       setStructuredSummaryOutput(markdownSummary);
+      setSummary(jsonData.summary || "");
+
+      return jsonData.summary || "";
     } catch (error: any) {
       console.error("Error processing summary:", error);
       setSummary(`Error processing summary: ${error.message}`);
