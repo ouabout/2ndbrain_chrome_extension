@@ -79,7 +79,7 @@ function MainApp({
         toast.success("Summary and tags generated successfully!");
     } catch (error) {
       console.error(error, "Error");
-      toast.error("An error occurred while generating tags.");
+      toast.error("An error occurred while generating tags: " + error);
     } 
   };
 
@@ -235,7 +235,43 @@ function MainApp({
     }
   };  */
 
+  function checkError(content) {
+    // Trim the content to handle any leading or trailing whitespace
+    const trimmedContent = content.trim();
+    
+    // Define a regex to match "Error: " followed by digits and " - "
+    const prefixRegex = /^Error: \d+ - /;
+    
+    // Check if the content starts with the error pattern
+    const match = trimmedContent.match(prefixRegex);
+    
+    if (match) {
+      // Extract the JSON string after the matched prefix
+      const jsonStartIndex = match[0].length;
+      const jsonString = trimmedContent.slice(jsonStartIndex).trim();
+      
+      try {
+        // Attempt to parse the JSON string
+        const jsonData = JSON.parse(jsonString);
+        return jsonData; // Return the parsed JSON (array or object)
+      } catch (error) {
+        // Return null if JSON parsing fails
+        return null;
+      }
+    } else {
+      // Return null if the pattern isn’t matched
+      return null;
+    }
+  }  
+
   const handleSummaryProcessing = (content: string) => {
+    const errorJson = checkError(content);
+    if (errorJson) {
+      // Handle the error
+      toast.error(errorJson[0]?.error?.message || "Unknown error");
+      return;
+    }
+
     try {
       console.log("processing thinking results to generate final summary...");
   
